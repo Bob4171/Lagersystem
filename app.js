@@ -1333,11 +1333,7 @@ function openScannerModal() {
         };
         
         html5QrCode.start(
-            { 
-                facingMode: "environment",
-                width: 640,
-                height: 480
-            }, 
+            { facingMode: "environment" }, 
             config,
             (decodedText, decodedResult) => {
                 // Success scanning barcode
