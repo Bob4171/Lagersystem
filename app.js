@@ -1049,33 +1049,48 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-async function triggerBarcodeScannedAction(barcode) {
+async function triggerBarcodeScannedAction(barcode, qty = 1) {
     playSound("scan");
-    logActivity(`Hardware-scanner scannede stregkode (${barcode}).`, 'Medarbejder');
+    logActivity(`Stregkode scannede (${barcode}) x${qty}.`, 'Medarbejder');
     
     // Check if product already exists
     const prod = products.find(p => p.barcode === barcode);
     if (prod) {
-        showToast(`Produkt fundet: ${prod.name}`);
-        showProductSheet(prod.id);
-    } else {
-        // Product not found. Prompt online fetch or manual create
-        const create = confirm(`Stregkoden ${barcode} findes ikke i databasen. Vil du hente oplysningerne online og oprette produktet?`);
-        if (create) {
-            fetchOnlineProductDetails(barcode);
+        // Increment quantity automatically by scanned amount
+        const oldQty = prod.quantity;
+        prod.quantity = (parseInt(prod.quantity) || 0) + qty;
+        prod.lastEdited = new Date().toISOString();
+        
+        saveProducts();
+        renderInventoryTable();
+        initDashboard();
+        
+        // Update product detail sheet if it's currently open for this product
+        if (selectedProduct && selectedProduct.id === prod.id) {
+            document.getElementById("sheet-stock-value").innerText = prod.quantity;
+            const badge = document.getElementById("sheet-badge");
+            if (badge) {
+                const statusClass = prod.quantity === 0 ? 'badge-out-stock' : prod.quantity <= prod.minStock ? 'badge-low-stock' : 'badge-instock';
+                badge.className = `list-item-badge ${statusClass}`;
+                badge.innerText = prod.quantity === 0 ? 'Udsolgt' : prod.quantity <= prod.minStock ? 'Lav beholdning' : 'Lager OK';
+            }
         }
+        
+        showToast(`+${qty} ${prod.name} (Lager: ${prod.quantity} stk)`);
+        playSound("success");
+    } else {
+        // New product scanned. Automatically fetch online and save without blocking
+        showToast(`Ny stregkode: ${barcode}. Henter informationer...`, "warning");
+        fetchOnlineProductDetailsAndSave(barcode, qty);
     }
 }
 
-// Fetch online details via local Python proxy server
-async function fetchOnlineProductDetails(barcode) {
-    showToast("Henter produktinformationer online...");
+// Fetch online details and automatically save to database with qty N
+async function fetchOnlineProductDetailsAndSave(barcode, qty = 1) {
     try {
         const response = await fetch(`/proxy/product/${barcode}`);
         if (response.status === 404) {
-            showToast("Stregkode ikke fundet i online-databasen. Opret manuelt.", "warning");
-            openProductFormModal();
-            document.getElementById("form-barcode").value = barcode;
+            savePlaceholderProduct(barcode, "Ukendt vare", qty);
             return;
         }
         if (!response.ok) throw new Error("Search failed");
@@ -1084,58 +1099,86 @@ async function fetchOnlineProductDetails(barcode) {
         
         if (data.status === 1 && data.product) {
             const p = data.product;
+            const name = p.product_name || "Online Vare";
+            const brand = p.brands || "";
+            const category = p.categories ? p.categories.split(',')[0] : "Diverse";
+            const notes = p.quantity ? `Vægt: ${p.quantity}` : "";
             
-            // Extract the cleanest transparent or official photo
+            // Extract image URL if exists
             let img = p.image_front_url || p.image_url || p.image_front_thumb_url || "";
             
-            openProductFormModal();
-            document.getElementById("form-barcode").value = barcode;
-            document.getElementById("form-name").value = p.product_name || "";
-            document.getElementById("form-brand").value = p.brands || "";
-            document.getElementById("form-category").value = p.categories ? p.categories.split(',')[0] : "";
+            const newProduct = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
+                barcode,
+                name,
+                brand,
+                category,
+                priceSale: 0,
+                priceCost: 0,
+                quantity: qty,
+                minStock: 5,
+                location: "-",
+                supplier: "",
+                notes,
+                image: "",
+                lastEdited: new Date().toISOString()
+            };
             
-            // Weight notes
-            const notes = p.quantity ? `Vægt: ${p.quantity}` : "";
-            document.getElementById("form-notes").value = notes;
+            products.push(newProduct);
+            saveProducts();
+            renderInventoryTable();
+            initDashboard();
             
+            showToast(`Oprettet online: ${name} (+${qty})`);
+            playSound("success");
+            
+            // Load and convert image to base64 in background
             if (img) {
-                // We show loading indicators or fetch through proxy to convert image to local base64
-                document.getElementById("product-img-upload-text").innerText = "Henter online produktbillede...";
                 convertImageToBase64(img, (base64) => {
-                    const imgInput = document.getElementById("form-image-input");
-                    // Store the converted image
-                    imgInput.dataset.base64 = base64;
-                    document.getElementById("product-img-upload-text").innerText = "Online produktbillede indlæst successfully!";
-                    // Bind base64 directly to the form handler
-                    document.getElementById("btn-form-submit").onclick = (function(oldSubmit) {
-                        return function() {
-                            const imgInput = document.getElementById("form-image-input");
-                            if (imgInput.dataset.base64) {
-                                // Inject base64 into form values
-                                const pIdx = products.length - 1;
-                                if (pIdx >= 0) {
-                                    products[pIdx].image = imgInput.dataset.base64;
-                                }
-                            }
-                            oldSubmit();
-                        };
-                    })(document.getElementById("btn-form-submit").onclick);
+                    if (base64) {
+                        const updatedProd = products.find(prod => prod.barcode === barcode);
+                        if (updatedProd) {
+                            updatedProd.image = base64;
+                            saveProducts();
+                            renderInventoryTable();
+                        }
+                    }
                 });
             }
-            
-            showToast("Produktinformationer hentet successfully!");
-            playSound("success");
         } else {
-            showToast("Stregkoden blev ikke fundet online. Opret manuelt.", "warning");
-            openProductFormModal();
-            document.getElementById("form-barcode").value = barcode;
+            savePlaceholderProduct(barcode, "Ukendt vare", qty);
         }
     } catch (err) {
         console.error("Online lookup error:", err);
-        showToast("Netværksfejl under online opslag.", "error");
-        openProductFormModal();
-        document.getElementById("form-barcode").value = barcode;
+        savePlaceholderProduct(barcode, "Netværksfejl vare", qty);
     }
+}
+
+function savePlaceholderProduct(barcode, defaultName, qty = 1) {
+    const newProduct = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
+        barcode,
+        name: `${defaultName} (${barcode})`,
+        brand: "",
+        category: "Diverse",
+        priceSale: 0,
+        priceCost: 0,
+        quantity: qty,
+        minStock: 5,
+        location: "-",
+        supplier: "",
+        notes: "Automatisk oprettet ved scanning",
+        image: "",
+        lastEdited: new Date().toISOString()
+    };
+    
+    products.push(newProduct);
+    saveProducts();
+    renderInventoryTable();
+    initDashboard();
+    
+    showToast(`Oprettet placeholder: ${newProduct.name} (+${qty})`, "warning");
+    playSound("success");
 }
 
 // Convert image URL to Base64 to store in localStorage (using a Canvas to bypass CORS where applicable)
@@ -1384,18 +1427,19 @@ function pollMobileScanner(code) {
             if (!isMobilePairingActive || currentPairingCode !== code) return;
             
             if (data.status === "scanned") {
+                const qtyVal = data.qty || 1;
                 // Update status indicator to success green
                 const dot = document.getElementById("mobile-pairing-status-dot");
                 const text = document.getElementById("mobile-pairing-status-text");
                 dot.style.backgroundColor = "var(--primary)";
-                text.innerText = `Varer modtaget! Sidste: ${data.barcode}`;
+                text.innerText = `Varer modtaget! Sidste: ${data.barcode} (x${qtyVal})`;
                 
                 // Show toast and trigger scan event
-                showToast(`Mobil scan modtaget: ${data.barcode}`, "success");
+                showToast(`Mobil scan modtaget: ${data.barcode} (x${qtyVal})`, "success");
                 playSound("scan");
                 
                 // Trigger action
-                triggerBarcodeScannedAction(data.barcode);
+                triggerBarcodeScannedAction(data.barcode, qtyVal);
                 
                 // Re-poll immediately
                 pollMobileScanner(code);

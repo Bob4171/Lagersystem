@@ -246,12 +246,26 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
             
             try:
                 # Wait for up to 25 seconds for a mobile scan event
-                barcode = sess["queue"].get(timeout=25)
+                scan_data = sess["queue"].get(timeout=25)
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "scanned", "barcode": barcode}).encode('utf-8'))
+                
+                # Check if it's new dict format or old string format
+                if isinstance(scan_data, dict):
+                    response_data = {
+                        "status": "scanned",
+                        "barcode": scan_data["barcode"],
+                        "qty": int(scan_data.get("qty", 1))
+                    }
+                else:
+                    response_data = {
+                        "status": "scanned",
+                        "barcode": scan_data,
+                        "qty": 1
+                    }
+                self.wfile.write(json.dumps(response_data).encode('utf-8'))
             except queue.Empty:
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -288,6 +302,7 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
             query = urllib.parse.parse_qs(parsed_url.query)
             code = query.get('code', [''])[0]
             barcode = query.get('barcode', [''])[0]
+            qty = query.get('qty', ['1'])[0]
             if not code or not barcode:
                 self.send_response(400)
                 self.end_headers()
@@ -304,8 +319,8 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "session_not_found"}).encode('utf-8'))
                 return
             
-            # Put barcode in queue to wake up the waiting PC thread
-            sess["queue"].put(barcode)
+            # Put barcode and qty in queue to wake up the waiting PC thread
+            sess["queue"].put({"barcode": barcode, "qty": qty})
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
