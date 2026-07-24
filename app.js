@@ -1278,10 +1278,7 @@ function openScannerModal() {
                 // Taller rectangular scanning box (85% width and 65% height)
                 return { width: Math.floor(width * 0.85), height: Math.floor(height * 0.65) };
             },
-            aspectRatio: 1.333333,
-            experimentalFeatures: {
-                useBarCodeDetectorIfSupported: true
-            }
+            aspectRatio: 1.333333
         };
         
         html5QrCode.start(
