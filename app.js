@@ -1275,8 +1275,8 @@ function openScannerModal() {
         const config = {
             fps: 15,
             qrbox: function(width, height) {
-                // Wide rectangular scanning box optimized for horizontal barcodes
-                return { width: Math.floor(width * 0.85), height: Math.floor(height * 0.45) };
+                // Taller rectangular scanning box (85% width and 65% height)
+                return { width: Math.floor(width * 0.85), height: Math.floor(height * 0.65) };
             },
             aspectRatio: 1.333333,
             experimentalFeatures: {
