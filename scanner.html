@@ -413,8 +413,9 @@
             const config = {
                 fps: 15,
                 qrbox: function(width, height) {
-                    // Optimized box width for barcode formats
-                    return { width: Math.floor(width * 0.85), height: Math.floor(height * 0.45) };
+                    // Large square scanning box (80% of minimum dimension) - plenty of room for barcode numbers
+                    const size = Math.floor(Math.min(width, height) * 0.8);
+                    return { width: size, height: size };
                 },
                 aspectRatio: 1.333333,
                 experimentalFeatures: {
