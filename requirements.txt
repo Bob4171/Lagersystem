@@ -1,0 +1,2 @@
+# Relying entirely on Python standard library modules.
+# No external package dependencies required.

@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="da">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WarehouseFlow — AI-Powered Inventory System</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- html5-qrcode library for webcam scanner -->
+    <script src="https://unpkg.com/html5-qrcode" defer></script>
+</head>
+
+<body>
+
+    <!-- --- SETUP WIZARD OVERLAY --- -->
+    <div id="setup-wizard" class="setup-overlay">
+        <div class="setup-card">
+            <div class="setup-header">
+                <h2>WarehouseFlow</h2>
+                <p>Konfigurer dit lagerstyringssystem på under et minut</p>
+            </div>
+            <div class="setup-body">
+                <!-- Step 1: Profile & Regional settings -->
+                <div id="setup-step-1" class="setup-step active">
+                    <div class="form-group">
+                        <label for="setup-company-name">Virksomhedsnavn / Lager ejer *</label>
+                        <input type="text" id="setup-company-name" class="input-control"
+                            placeholder="F.eks. ScanCorp Aps" required>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="setup-warehouse-name">Lager Navn *</label>
+                            <input type="text" id="setup-warehouse-name" class="input-control"
+                                placeholder="F.eks. Hovedlager" value="Hovedlager" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="setup-currency">Valuta</label>
+                            <select id="setup-currency" class="input-control">
+                                <option value="DKK">DKK (kr.)</option>
+                                <option value="EUR">EUR (€)</option>
+                                <option value="USD">USD ($)</option>
+                                <option value="GBP">GBP (£)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="setup-language">Sprog</label>
+                        <select id="setup-language" class="input-control">
+                            <option value="da">Dansk</option>
+                            <option value="en">English</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Step 2: Scanner & Logo -->
+                <div id="setup-step-2" class="setup-step">
+                    <div class="form-group">
+                        <label>Upload Logo (Valgfrit)</label>
+                        <div class="logo-upload-box">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <p id="upload-status-text">Træk dit logo hertil eller klik for at uploade</p>
+                            <input type="file" id="setup-logo-input" accept="image/*">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Vælg primær stregkodescanner</label>
+                        <div class="scanner-grid">
+                            <div class="scanner-option-card selected" data-scanner="usb">
+                                <div class="scanner-card-icon">🔌</div>
+                                <div class="scanner-card-info">
+                                    <div class="scanner-card-title">USB Stregkodescanner</div>
+                                    <div class="scanner-card-desc">Simulerer tastatur. Lytter automatisk i baggrunden
+                                        ved scan.</div>
+                                </div>
+                            </div>
+                            <div class="scanner-option-card" data-scanner="webcam">
+                                <div class="scanner-card-icon">📷</div>
+                                <div class="scanner-card-info">
+                                    <div class="scanner-card-title">Webcam scanner</div>
+                                    <div class="scanner-card-desc">Bruger din computers kamera til automatisk
+                                        genkendelse.</div>
+                                </div>
+                            </div>
+                            <div class="scanner-option-card" data-scanner="mobile">
+                                <div class="scanner-card-icon">📱</div>
+                                <div class="scanner-card-info">
+                                    <div class="scanner-card-title">Mobiltelefon kamera</div>
+                                    <div class="scanner-card-desc">Scanner via din mobils browser med indbygget
+                                        lommelygte.</div>
+                                </div>
+                            </div>
+                            <div class="scanner-option-card" data-scanner="manual">
+                                <div class="scanner-card-icon">✍️</div>
+                                <div class="scanner-card-info">
+                                    <div class="scanner-card-title">Manuel indtastning</div>
+                                    <div class="scanner-card-desc">Ingen scanner tilsluttet. Indtast koder manuelt.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="setup-footer">
+                <button type="button" id="btn-setup-prev" class="btn btn-secondary"
+                    style="visibility: hidden;">Tilbage</button>
+                <button type="button" id="btn-setup-next" class="btn btn-primary">Næste step</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- APP CONTAINER --- -->
+    <div class="app-container">
+
+        <!-- SIDEBAR -->
+        <aside class="app-sidebar">
+            <div class="sidebar-brand-wrapper">
+                <img id="app-company-logo" class="sidebar-logo"
+                    src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='30' viewBox='0 0 100 30' fill='none'><rect width='100' height='30' rx='4' fill='%2310b981'/><text x='10' y='20' fill='white' font-family='Outfit' font-size='12' font-weight='bold'>WAREHOUSE</text></svg>"
+                    alt="WarehouseFlow Logo">
+                <span id="app-company-name-text" class="sidebar-brand-name">WarehouseFlow</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-item active" data-view="dashboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z" />
+                    </svg>
+                    <span>Dashboard</span>
+                </div>
+                <div class="nav-item" data-view="products">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <span>Lagerbeholdning</span>
+                </div>
+                <div class="nav-item" data-view="activity-log">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Aktivitetslog</span>
+                </div>
+                <div class="nav-item" data-view="statistics">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <span>Statistik</span>
+                </div>
+                <div class="nav-item" data-view="settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span>Lagerindstillinger</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-user-card">
+                    <div class="sidebar-user-avatar" id="sidebar-user-avatar">O</div>
+                    <div class="sidebar-user-name">Medarbejder</div>
+                </div>
+                <!-- Light/Dark Toggle -->
+                <button type="button" id="btn-theme-toggle" class="btn btn-secondary btn-icon-only"
+                    style="padding: 0; display: flex; align-items: center; justify-content: center; font-size: 16px;">🌓</button>
+            </div>
+        </aside>
+
+        <!-- MAIN WINDOW WRAPPER -->
+        <div class="app-content-wrapper">
+
+            <!-- TOPBAR -->
+            <header class="app-topbar">
+                <div class="topbar-left">
+                    <button class="hamburger-btn" id="btn-hamburger">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            width="24" height="24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </button>
+                    <span id="app-view-title" class="topbar-title">Dashboard</span>
+                </div>
+                <div class="topbar-right">
+                    <!-- Global Search trigger -->
+                    <div class="topbar-search-trigger" id="btn-trigger-search">
+                        <svg class="palette-search-icon" xmlns="http://www.w3.org/2000/svg" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <span>Søg på produkter, barcodes...</span>
+                        <kbd class="search-shortcut-kbd">Ctrl K</kbd>
+                    </div>
+                    <button type="button" id="btn-topbar-mobile-pairing" class="btn btn-secondary">Mobil Scanner 📱</button>
+                    <button type="button" id="btn-topbar-scan" class="btn btn-primary">Scan Stregkode 📷</button>
+                </div>
+            </header>
+
+            <!-- --- VIEW: DASHBOARD --- -->
+            <main id="view-dashboard" class="view-container active">
+                <!-- Metrics counters -->
+                <div class="dashboard-grid">
+                    <div class="metric-card primary">
+                        <span class="metric-label">Varer i alt</span>
+                        <div class="metric-val-row">
+                            <span id="metric-total-products" class="metric-value">0</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent">
+                        <span class="metric-label">Samlet lagerbeholdning</span>
+                        <div class="metric-val-row">
+                            <span id="metric-total-stock" class="metric-value">0</span>
+                        </div>
+                    </div>
+                    <div class="metric-card warning">
+                        <span class="metric-label">Lav beholdning</span>
+                        <div class="metric-val-row">
+                            <span id="metric-low-stock" class="metric-value">0</span>
+                        </div>
+                    </div>
+                    <div class="metric-card danger">
+                        <span class="metric-label">Udsolgt</span>
+                        <div class="metric-val-row">
+                            <span id="metric-out-stock" class="metric-value">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dashboard Layout Details row -->
+                <div class="dashboard-layout-row">
+                    <!-- Col 1: Chart and items list -->
+                    <div class="layout-col-left">
+                        <div class="layout-col-card">
+                            <div class="col-card-header">
+                                <span class="col-card-title">Lagerværdi Udvikling (DKK)</span>
+                            </div>
+                            <!-- Live SVG Chart -->
+                            <svg class="svg-chart" id="dashboard-stock-chart" viewBox="0 0 600 240">
+                                <defs>
+                                    <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#10b981" />
+                                        <stop offset="100%" stop-color="#10b981" stop-opacity="0" />
+                                    </linearGradient>
+                                </defs>
+                                <!-- Grid Lines -->
+                                <line class="chart-grid-line" x1="50" y1="40" x2="550" y2="40" />
+                                <line class="chart-grid-line" x1="50" y1="90" x2="550" y2="90" />
+                                <line class="chart-grid-line" x1="50" y1="140" x2="550" y2="140" />
+                                <line class="chart-grid-line" x1="50" y1="190" x2="550" y2="190" />
+
+                                <path class="chart-area" d="" />
+                                <path class="chart-line" d="" />
+                                <!-- Axis tags placeholder -->
+                                <text class="chart-axis-text" x="15" y="195">0</text>
+                                <text class="chart-axis-text" x="15" y="145">2.5K</text>
+                                <text class="chart-axis-text" x="15" y="95">5.0K</text>
+                                <text class="chart-axis-text" x="15" y="45">10K</text>
+
+                                <text class="chart-axis-text" x="50" y="215">Mandag</text>
+                                <text class="chart-axis-text" x="175" y="215">Onsdag</text>
+                                <text class="chart-axis-text" x="300" y="215">Fredag</text>
+                                <text class="chart-axis-text" x="425" y="215">Søndag</text>
+                            </svg>
+                        </div>
+
+                        <div class="layout-col-card">
+                            <div class="col-card-header">
+                                <span class="col-card-title">Senest Scannede Produkter</span>
+                            </div>
+                            <div class="list-group" id="dashboard-recent-scanned">
+                                <!-- Dynamic recent products -->
+                                <div class="table-empty-state">Ingen scannede produkter endnu.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Col 2: Recent log & quick links -->
+                    <div class="layout-col-right">
+                        <div class="layout-col-card">
+                            <div class="col-card-header">
+                                <span class="col-card-title">Genveje</span>
+                            </div>
+                            <div class="quick-action-grid">
+                                <button type="button" class="quick-action-btn" id="btn-quick-add">
+                                    <span class="quick-action-icon">➕</span>
+                                    <span class="quick-action-label">Nyt Produkt</span>
+                                </button>
+                                <button type="button" class="quick-action-btn" id="btn-quick-scan">
+                                    <span class="quick-action-icon">📷</span>
+                                    <span class="quick-action-label">Hurtig Scan</span>
+                                </button>
+                                <button type="button" class="quick-action-btn" id="btn-quick-export">
+                                    <span class="quick-action-icon">📤</span>
+                                    <span class="quick-action-label">Eksporter CSV</span>
+                                </button>
+                                <button type="button" class="quick-action-btn" id="btn-quick-import">
+                                    <span class="quick-action-icon">📥</span>
+                                    <span class="quick-action-label">Importer CSV</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="layout-col-card">
+                            <div class="col-card-header">
+                                <span class="col-card-title">Nyeste Hændelser</span>
+                            </div>
+                            <div class="list-group" id="dashboard-recent-events">
+                                <!-- Dynamic activity events -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- --- VIEW: PRODUCTS / INVENTORY --- -->
+            <main id="view-products" class="view-container">
+                <div class="table-toolbar">
+                    <div class="toolbar-left">
+                        <input type="text" id="inventory-search-query" class="input-control"
+                            placeholder="Søg på produkt, stregkode, SKU, placering...">
+                        <select id="inventory-filter-category" class="input-control" style="width: 160px;">
+                            <option value="">Alle Kategorier</option>
+                        </select>
+                        <select id="inventory-filter-stock" class="input-control" style="width: 150px;">
+                            <option value="">Alle Statusser</option>
+                            <option value="low">Lav Beholdning</option>
+                            <option value="out">Udsolgt</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-right">
+                        <button type="button" id="btn-inventory-add" class="btn btn-primary">Opret Produkt ➕</button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="flow-table">
+                        <thead>
+                            <tr>
+                                <th>Billede & Navn</th>
+                                <th>Stregkode / SKU</th>
+                                <th>Kategori</th>
+                                <th>Salgspris</th>
+                                <th>Købspris</th>
+                                <th>Lagerantal</th>
+                                <th>Hylde / Placering</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-table-body">
+                            <!-- Dynamic Table Rows -->
+                        </tbody>
+                    </table>
+                    <div id="inventory-table-empty" class="table-empty-state" style="display: none;">Ingen produkter
+                        fundet matching kriterierne.</div>
+
+                    <div class="table-pagination">
+                        <span id="inventory-pagination-text">Viser 0-0 af 0 produkter</span>
+                        <div class="pagination-btn-row">
+                            <button type="button" id="btn-pagination-prev" class="btn btn-secondary btn-icon-only"
+                                style="width: 32px; height: 32px;">◀</button>
+                            <button type="button" id="btn-pagination-next" class="btn btn-secondary btn-icon-only"
+                                style="width: 32px; height: 32px;">▶</button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- --- VIEW: ACTIVITY LOG --- -->
+            <main id="view-activity-log" class="view-container">
+                <div class="table-toolbar">
+                    <div class="toolbar-left">
+                        <input type="text" id="log-search-query" class="input-control"
+                            placeholder="Søg i historikken (f.eks. Oliver, Coca-Cola)...">
+                    </div>
+                    <div class="toolbar-right">
+                        <button type="button" id="btn-clear-logs" class="btn btn-secondary btn-danger">Ryd Aktivitetslog
+                            🗑️</button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="flow-table">
+                        <thead>
+                            <tr>
+                                <th>Tidspunkt</th>
+                                <th>Bruger</th>
+                                <th>Handling / Hændelse</th>
+                            </tr>
+                        </thead>
+                        <tbody id="log-table-body">
+                            <!-- Dynamic log records -->
+                        </tbody>
+                    </table>
+                    <div id="log-table-empty" class="table-empty-state" style="display: none;">Ingen aktivitetslog
+                        fundet.</div>
+                </div>
+            </main>
+
+            <!-- --- VIEW: STATISTICS --- -->
+            <main id="view-statistics" class="view-container">
+                <div class="dashboard-grid">
+                    <div class="metric-card primary">
+                        <span class="metric-label">Samlet Lagerværdi (Salgspris)</span>
+                        <div class="metric-val-row">
+                            <span id="stat-total-value-sale" class="metric-value">0 kr.</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent">
+                        <span class="metric-label">Samlet Lagerværdi (Købspris)</span>
+                        <div class="metric-val-row">
+                            <span id="stat-total-value-cost" class="metric-value">0 kr.</span>
+                        </div>
+                    </div>
+                    <div class="metric-card warning">
+                        <span class="metric-label">Estimeret Profit ved Salg</span>
+                        <div class="metric-val-row">
+                            <span id="stat-estimated-profit" class="metric-value">0 kr.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-layout-row">
+                    <div class="layout-col-left">
+                        <div class="layout-col-card">
+                            <span class="col-card-title">Mest Scannede Produkter (Volumen)</span>
+                            <div style="margin-top: 20px;" id="stat-most-scanned-bars">
+                                <!-- Dynamic progress bars representing counts -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="layout-col-right">
+                        <div class="layout-col-card">
+                            <span class="col-card-title">Kategori Fordeling</span>
+                            <div style="margin-top: 20px;" id="stat-category-distribution-bars">
+                                <!-- Dynamic categories distribution list -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- --- VIEW: SETTINGS --- -->
+            <main id="view-settings" class="view-container">
+                <div class="layout-col-card" style="max-width: 600px;">
+                    <div class="col-card-header">
+                        <span class="col-card-title">Generelle indstillinger</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-warehouse-name">Lager Navn</label>
+                        <input type="text" id="settings-warehouse-name" class="input-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-currency">Valuta enhed</label>
+                        <select id="settings-currency" class="input-control">
+                            <option value="DKK">DKK (kr.)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="USD">USD ($)</option>
+                            <option value="GBP">GBP (£)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-scanner">Standard Scanner</label>
+                        <select id="settings-scanner" class="input-control">
+                            <option value="usb">🔌 USB Barcode Scanner</option>
+                            <option value="webcam">📷 Webcam Scanner</option>
+                            <option value="mobile">📱 Mobiltelefon Kamera</option>
+                            <option value="manual">✍️ Manuel Indtastning</option>
+                        </select>
+                    </div>
+                    <button type="button" id="btn-save-settings" class="btn btn-primary">Gem indstillinger 💾</button>
+                </div>
+
+                <div class="layout-col-card"
+                    style="max-width: 600px; margin-top: 24px; border-color: rgba(244,63,94,0.2);">
+                    <div class="col-card-header">
+                        <span class="col-card-title" style="color: var(--danger);">Genopretning & Testdata</span>
+                    </div>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+                        Brug knappen nedenfor til at indlæse et sæt professionelle test-varer (f.eks. Coca-Cola,
+                        Havregryn, Red Bull, Sneakers) i systemet. Dette gør det nemt at demonstrere søge-, scanner- og
+                        statistik-funktionerne.
+                    </p>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button type="button" id="btn-load-mock-data" class="btn btn-secondary">Indlæs Test Produkter
+                            📦</button>
+                        <button type="button" id="btn-wipe-data" class="btn btn-danger">Nulstil Alt Data ⚠️</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- --- GLOBAL COMMAND PALETTE (CTRL+K) --- -->
+    <div id="command-palette" class="command-palette-overlay">
+        <div class="command-palette-box">
+            <div class="palette-input-wrapper">
+                <svg class="palette-search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" id="palette-search-input" class="palette-input"
+                    placeholder="Søg efter produkt, stregkode, kategori..." autocomplete="off">
+                <kbd class="palette-escape-kbd">ESC</kbd>
+            </div>
+            <div class="palette-results" id="palette-results-list">
+                <!-- Search items appear here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- --- CAMERA SCREENING MODAL --- -->
+    <div id="modal-scan" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">Live Kamera Scanning</span>
+                <button type="button" class="modal-close-btn" id="btn-close-modal-scan">×</button>
+            </div>
+            <div class="modal-body" style="text-align: center;">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Hold stregkoden centreret i
+                    rammen for at scanne automatisk.</p>
+                <div class="scan-camera-wrapper">
+                    <div id="interactive-camera-feed" style="width: 100%; height: 100%;"></div>
+                    <div class="scan-camera-overlay">
+                        <div class="scan-target-box" id="scan-laser-target">
+                            <div class="scan-laser-line"></div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button type="button" id="btn-scan-flashlight" class="btn btn-secondary" style="display: none;">Tænd
+                        Lommelygte 🔦</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btn-scan-manual-fallback" class="btn btn-secondary">Tast stregkode
+                    manuelt</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- MOBILE PAIRING MODAL --- -->
+    <div id="modal-mobile-pairing" class="modal">
+        <div class="modal-content" style="max-width: 440px;">
+            <div class="modal-header">
+                <span class="modal-title">Tilslut Mobil Scanner</span>
+                <button type="button" class="modal-close-btn" id="btn-close-modal-mobile-pairing">×</button>
+            </div>
+            <div class="modal-body" style="text-align: center; padding: 24px;">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+                    Scan QR-koden med din telefons kamera for at tilslutte den som trådløs stregkodescanner.
+                </p>
+                
+                <!-- QR Code wrapper -->
+                <div style="background: white; padding: 16px; border-radius: 12px; display: inline-block; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                    <img id="mobile-pairing-qr" src="" alt="QR-kode" style="width: 180px; height: 180px; display: block; margin: 0 auto;">
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <span style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 6px; letter-spacing: 0.5px;">Forbindelseskode</span>
+                    <div style="font-size: 32px; font-weight: 800; color: var(--primary); letter-spacing: 4px; background: rgba(16, 185, 129, 0.08); padding: 12px; border-radius: 8px; border: 1px dashed rgba(16, 185, 129, 0.3); display: inline-block; min-width: 140px;" id="mobile-pairing-code">
+                        ----
+                    </div>
+                </div>
+                
+                <div id="mobile-pairing-status" style="font-size: 13px; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <div class="status-dot" id="mobile-pairing-status-dot" style="background-color: var(--warning); width: 8px; height: 8px; border-radius: 50%;"></div>
+                    <span id="mobile-pairing-status-text">Venter på tilslutning...</span>
+                </div>
+                
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 15px; word-break: break-all; background: rgba(255,255,255,0.02); padding: 8px; border-radius: 6px;">
+                    Manuelt link: <a id="mobile-pairing-link" href="#" target="_blank" style="color: var(--primary); text-decoration: underline;">https://...</a>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btn-close-pairing-modal" class="btn btn-secondary" style="width: 100%;">Luk</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- PRODUCT DETAIL SLIDE SHEET --- -->
+    <div id="product-detail-sheet" class="detail-sheet-overlay">
+        <div class="detail-sheet">
+            <div class="sheet-header">
+                <span class="modal-title">Produkt Detaljer</span>
+                <div class="sheet-header-actions">
+                    <button type="button" id="btn-sheet-edit" class="btn btn-secondary"
+                        style="padding: 8px 12px;">Rediger 📝</button>
+                    <button type="button" id="btn-sheet-delete" class="btn btn-danger" style="padding: 8px 12px;">Slet
+                        🗑️</button>
+                    <button type="button" class="modal-close-btn" id="btn-close-detail-sheet">×</button>
+                </div>
+            </div>
+            <div class="sheet-body">
+                <div class="sheet-product-main">
+                    <div class="sheet-product-image-container">
+                        <img id="sheet-img" class="sheet-product-img" src="" alt="Produktbillede">
+                    </div>
+                    <h3 id="sheet-name" class="sheet-product-name">Bananer</h3>
+                    <p id="sheet-brand" class="sheet-product-brand">Rema 1000</p>
+                </div>
+
+                <!-- Stock adjustment card -->
+                <div class="sheet-stock-card">
+                    <div class="sheet-stock-info">
+                        <span class="sheet-stock-lbl">Aktuelt lager</span>
+                        <span id="sheet-stock-value" class="sheet-stock-val">0</span>
+                    </div>
+                    <div class="sheet-stock-adjuster">
+                        <button type="button" class="adjust-btn" id="btn-stock-dec">-</button>
+                        <button type="button" class="adjust-btn" id="btn-stock-inc">+</button>
+                    </div>
+                </div>
+
+                <!-- Meta grid details -->
+                <div class="sheet-grid">
+                    <div class="sheet-grid-item">
+                        <span class="sheet-grid-lbl">Stregkode / SKU</span>
+                        <div id="sheet-barcode" class="sheet-grid-val">-</div>
+                    </div>
+                    <div class="sheet-grid-item">
+                        <span class="sheet-grid-lbl">Kategori</span>
+                        <div id="sheet-category" class="sheet-grid-val">-</div>
+                    </div>
+                    <div class="sheet-grid-item">
+                        <span class="sheet-grid-lbl">Salgspris</span>
+                        <div id="sheet-price-sale" class="sheet-grid-val">-</div>
+                    </div>
+                    <div class="sheet-grid-item">
+                        <span class="sheet-grid-lbl">Købspris (Kost)</span>
+                        <div id="sheet-price-cost" class="sheet-grid-val">-</div>
+                    </div>
+                    <div class="sheet-grid-item">
+                        <span class="sheet-grid-lbl">Minimum Lager (Alarm)</span>
+                        <div id="sheet-min-stock" class="sheet-grid-val">-</div>
+                    </div>
+                    <div class="sheet-grid-item">
+                        <span class="sheet-grid-lbl">Lager Placering / Reol</span>
+                        <div id="sheet-location" class="sheet-grid-val">-</div>
+                    </div>
+                    <div class="sheet-grid-item" style="grid-column: span 2;">
+                        <span class="sheet-grid-lbl">Beskrivelse / Notater</span>
+                        <div id="sheet-notes" class="sheet-grid-val"
+                            style="font-weight: 400; color: var(--text-muted);">-</div>
+                    </div>
+                </div>
+
+                <!-- Label Printing & QR tools -->
+                <div style="margin-bottom: 24px; display: flex; gap: 12px;">
+                    <button type="button" id="btn-print-label" class="btn btn-secondary" style="flex: 1;">Skriv Label
+                        🖨️</button>
+                    <button type="button" id="btn-sheet-qr" class="btn btn-secondary" style="flex: 1;">Vis QR-kode
+                        🔗</button>
+                </div>
+
+                <!-- Historical movements list -->
+                <div class="history-section">
+                    <h4 class="history-title">Produkt Historik</h4>
+                    <div class="history-list" id="sheet-history-list">
+                        <!-- Dynamic history logs -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- PRODUCT CREATION & EDIT MODAL --- -->
+    <div id="modal-product" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span id="modal-product-title" class="modal-title">Opret nyt produkt</span>
+                <button type="button" class="modal-close-btn" id="btn-close-modal-product">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="product-form">
+                    <input type="hidden" id="form-product-id">
+
+                    <div class="form-group">
+                        <label for="form-barcode">Stregkode (Scan eller tast) *</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="form-barcode" class="input-control"
+                                placeholder="F.eks. 5741000118557" required>
+                            <button type="button" id="btn-form-scan-trigger" class="btn btn-secondary">Scan 📷</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="form-name">Produkt Navn *</label>
+                        <input type="text" id="form-name" class="input-control" placeholder="F.eks. Coca-Cola Zero"
+                            required>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="form-brand">Mærke / Producent</label>
+                            <input type="text" id="form-brand" class="input-control" placeholder="F.eks. Coca-Cola">
+                        </div>
+                        <div class="form-group">
+                            <label for="form-category">Kategori</label>
+                            <input type="text" id="form-category" class="input-control" placeholder="F.eks. Drikkevarer"
+                                list="category-suggestions">
+                            <datalist id="category-suggestions">
+                                <option value="Drikkevarer">
+                                <option value="Fødevarer">
+                                <option value="Is & Dessert">
+                                <option value="Elektronik">
+                                <option value="Husholdning">
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="form-price-sale">Salgspris (inkl. moms) *</label>
+                            <input type="number" id="form-price-sale" class="input-control" min="0" step="0.5" value="0"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label for="form-price-cost">Købspris (Kostpris) *</label>
+                            <input type="number" id="form-price-cost" class="input-control" min="0" step="0.5" value="0"
+                                required>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="form-quantity">Startlager (Antal) *</label>
+                            <input type="number" id="form-quantity" class="input-control" min="0" value="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="form-min-stock">Minimum lager (Alarm) *</label>
+                            <input type="number" id="form-min-stock" class="input-control" min="0" value="5" required>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="form-location">Placering på lager (Reol / Hylde)</label>
+                            <input type="text" id="form-location" class="input-control" placeholder="F.eks. A-12">
+                        </div>
+                        <div class="form-group">
+                            <label for="form-supplier">Leverandør</label>
+                            <input type="text" id="form-supplier" class="input-control" placeholder="F.eks. Dagrofa">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="form-notes">Beskrivelse / Notater</label>
+                        <textarea id="form-notes" class="input-control" rows="3"
+                            placeholder="F.eks. Holdbarhedsdato, special-aftaler osv."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <label style="margin-bottom: 0;">Produktbillede (Valgfrit)</label>
+                            <button type="button" id="btn-auto-find-image" class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; height: auto; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; gap: 4px;">✨ Find Billede</button>
+                        </div>
+                        <div class="logo-upload-box">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <p id="product-img-upload-text">Klik for at uploade eller ændre billede</p>
+                            <input type="file" id="form-image-input" accept="image/*">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btn-form-cancel" class="btn btn-secondary">Annuller</button>
+                <button type="button" id="btn-form-submit" class="btn btn-primary">Gem Produkt</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- QR CODE VIEWER MODAL --- -->
+    <div id="modal-qr" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <span class="modal-title">Genereret QR-kode</span>
+                <button type="button" class="modal-close-btn" id="btn-close-modal-qr">×</button>
+            </div>
+            <div class="modal-body" style="text-align: center; padding: 32px 24px;">
+                <div id="qr-code-canvas-container"
+                    style="background: white; padding: 16px; border-radius: var(--radius-md); display: inline-block; box-shadow: var(--shadow-soft);">
+                    <canvas id="qr-canvas" width="200" height="200"></canvas>
+                </div>
+                <h4 id="qr-product-name" style="margin-top: 20px; font-family: var(--font-heading); font-size: 16px;">
+                    Coca Cola</h4>
+                <p id="qr-barcode-text" style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">
+                    5741000118557</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btn-download-qr" class="btn btn-primary btn-block"
+                    style="width: 100%;">Download QR-kode</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- TOAST NOTIFICATIONS --- -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- --- BARCODE LABEL PRINT TEMPLATE --- -->
+    <div id="label-print-template" class="print-label-wrapper">
+        <div id="print-lbl-name" class="print-label-name">Produktnavn</div>
+        <canvas id="print-lbl-barcode" class="print-label-barcode"></canvas>
+        <div class="print-label-meta">
+            <span id="print-lbl-sku">Barcode: 5741000118557</span>
+            <span id="print-lbl-price">Pris: 0 kr</span>
+        </div>
+    </div>
+
+    <!-- Application Script logic -->
+    <script src="app.js" defer></script>
+</body>
+
+</html>

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WarehouseFlow — Mobil Scanner</title>
+    <!-- Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+    <!-- html5-qrcode CDN -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        :root {
+            --bg-app: #08090f;
+            --bg-card: #121420;
+            --bg-input: #1a1d2e;
+            --primary: #10b981;
+            --primary-hover: #059669;
+            --primary-glow: rgba(16, 185, 129, 0.15);
+            --border-glass: rgba(255, 255, 255, 0.06);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --danger: #f43f5e;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --font-heading: 'Outfit', 'Inter', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-app);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            width: 100%;
+            max-width: 480px;
+            text-align: center;
+            margin-bottom: 24px;
+            margin-top: 10px;
+        }
+
+        .header h1 {
+            font-family: var(--font-heading);
+            font-size: 24px;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-lg);
+            width: 100%;
+            max-width: 480px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+        }
+
+        .title {
+            font-family: var(--font-heading);
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-control {
+            width: 100%;
+            padding: 14px 16px;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            font-size: 16px;
+            text-align: center;
+            letter-spacing: 2px;
+            font-weight: 700;
+            transition: all 0.25s;
+        }
+
+        .input-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary);
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: var(--radius-md);
+            border: none;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+
+        .btn:hover {
+            background: var(--primary-hover);
+        }
+
+        /* Scanner Screen Styles */
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.15);
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--primary);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .camera-wrapper {
+            position: relative;
+            width: 100%;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            background: black;
+            aspect-ratio: 4/3;
+            border: 1px solid var(--border-glass);
+            margin-bottom: 20px;
+        }
+
+        #interactive {
+            width: 100%;
+            height: 100%;
+        }
+
+        .scanner-laser {
+            position: absolute;
+            top: 50%;
+            left: 5%;
+            width: 90%;
+            height: 2px;
+            background: var(--primary);
+            box-shadow: 0 0 8px var(--primary);
+            z-index: 10;
+            animation: laserMove 2.5s infinite ease-in-out;
+            pointer-events: none;
+        }
+
+        @keyframes laserMove {
+            0% { top: 15%; }
+            50% { top: 85%; }
+            100% { top: 15%; }
+        }
+
+        .log-section {
+            width: 100%;
+            max-width: 480px;
+        }
+
+        .log-title {
+            font-family: var(--font-heading);
+            font-size: 14px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .log-list {
+            list-style: none;
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-md);
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .log-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-glass);
+            font-size: 13px;
+        }
+
+        .log-item:last-child {
+            border-bottom: none;
+        }
+
+        .log-code {
+            font-family: monospace;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .alert-error {
+            padding: 12px;
+            background: rgba(244, 63, 94, 0.1);
+            border: 1px solid rgba(244, 63, 94, 0.2);
+            color: var(--danger);
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <h1>WarehouseFlow</h1>
+        <p>Håndheldt Mobil Scanner</p>
+    </header>
+
+    <!-- Phase 1: Connect Screen -->
+    <main class="card" id="view-connect">
+        <h2 class="title">🔗 Forbind til PC</h2>
+        <div class="form-group">
+            <label for="input-code">Indtast 4-cifret kode</label>
+            <input type="number" id="input-code" class="input-control" placeholder="F.eks. 1234" maxlength="4" pattern="\d*">
+            <div id="connect-error" class="alert-error">Ugyldig eller udløbet kode!</div>
+        </div>
+        <button type="button" class="btn" id="btn-connect">Par med PC</button>
+    </main>
+
+    <!-- Phase 2: Active Scanner View -->
+    <main class="card" id="view-scanner" style="display: none;">
+        <div class="status-header">
+            <span>Forbundet til PC</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span id="session-code-display" style="font-weight: 700; color: var(--primary);">8341</span>
+                <div class="status-dot"></div>
+            </div>
+        </div>
+
+        <div class="camera-wrapper">
+            <div id="interactive"></div>
+            <div class="scanner-laser"></div>
+        </div>
+
+        <button type="button" class="btn" id="btn-disconnect" style="background: rgba(255,255,255,0.04); border: 1px solid var(--border-glass); color: var(--text-main);">
+            Afbryd forbindelse
+        </button>
+    </main>
+
+    <!-- Scanned Log list -->
+    <section class="log-section" id="view-log" style="display: none;">
+        <h3 class="log-title">Scannede varer (denne session)</h3>
+        <ul class="log-list" id="log-list-items">
+            <!-- Dynamic scanned barcodes -->
+        </ul>
+    </section>
+
+    <script>
+        let connectionCode = "";
+        let html5QrCode = null;
+        let audioCtx = null;
+
+        // Initialize audio context for beeping
+        function playBeep() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            osc.frequency.setValueAtTime(980, now);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+            
+            osc.start(now);
+            osc.stop(now + 0.15);
+        }
+
+        // Auto-check URL parameters for prefilled code
+        window.addEventListener("DOMContentLoaded", () => {
+            const params = new URLSearchParams(window.location.search);
+            const codeParam = params.get('code');
+            if (codeParam && codeParam.length === 4) {
+                document.getElementById("input-code").value = codeParam;
+                // Auto trigger connect
+                attemptConnection(codeParam);
+            }
+        });
+
+        document.getElementById("btn-connect").addEventListener("click", () => {
+            const code = document.getElementById("input-code").value.trim();
+            if (code.length === 4) {
+                attemptConnection(code);
+            } else {
+                showError("Indtast venligst en 4-cifret kode!");
+            }
+        });
+
+        document.getElementById("btn-disconnect").addEventListener("click", () => {
+            disconnectScanner();
+        });
+
+        async function attemptConnection(code) {
+            const btn = document.getElementById("btn-connect");
+            btn.disabled = true;
+            btn.innerText = "Forbinder...";
+            hideError();
+
+            try {
+                const response = await fetch(`/proxy/session/connect?code=${code}`);
+                const data = await response.json();
+                
+                if (data.status === "connected") {
+                    connectionCode = code;
+                    showScannerView();
+                } else {
+                    showError("Forbindelseskoden blev ikke fundet på PC'en!");
+                    btn.disabled = false;
+                    btn.innerText = "Par med PC";
+                }
+            } catch (err) {
+                console.error("Connection error:", err);
+                showError("Netværksfejl under oprettelse af forbindelse.");
+                btn.disabled = false;
+                btn.innerText = "Par med PC";
+            }
+        }
+
+        function showScannerView() {
+            document.getElementById("view-connect").style.display = "none";
+            document.getElementById("view-scanner").style.display = "block";
+            document.getElementById("view-log").style.display = "block";
+            document.getElementById("session-code-display").innerText = connectionCode;
+            document.getElementById("log-list-items").innerHTML = "";
+
+            startMobileScanner();
+        }
+
+        function disconnectScanner() {
+            stopMobileScanner();
+            connectionCode = "";
+            document.getElementById("view-connect").style.display = "block";
+            document.getElementById("view-scanner").style.display = "none";
+            document.getElementById("view-log").style.display = "none";
+            
+            const btn = document.getElementById("btn-connect");
+            btn.disabled = false;
+            btn.innerText = "Par med PC";
+        }
+
+        function startMobileScanner() {
+            html5QrCode = new Html5Qrcode("interactive");
+            const config = {
+                fps: 15,
+                qrbox: function(width, height) {
+                    // Optimized box width for barcode formats
+                    return { width: Math.floor(width * 0.85), height: Math.floor(height * 0.45) };
+                },
+                aspectRatio: 1.333333,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                }
+            };
+
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess,
+                () => {} // silent on errors
+            ).catch(err => {
+                console.error("Camera access error:", err);
+                alert("Kunne ikke starte kameraet. Giv tilladelse i din browser.");
+                disconnectScanner();
+            });
+        }
+
+        function stopMobileScanner() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode = null;
+                    document.getElementById("interactive").innerHTML = "";
+                }).catch(err => console.error(err));
+            }
+        }
+
+        async function onScanSuccess(decodedText) {
+            playBeep();
+            
+            // Add item immediately to local visual logs
+            addLogItem(decodedText);
+
+            // Send barcode to PC via proxy
+            try {
+                const response = await fetch(`/proxy/session/scan?code=${connectionCode}&barcode=${encodeURIComponent(decodedText)}`);
+                const data = await response.json();
+                if (data.status !== "sent") {
+                    console.error("Failed to forward scan:", data);
+                }
+            } catch (err) {
+                console.error("Error sending barcode to PC:", err);
+            }
+        }
+
+        function addLogItem(barcode) {
+            const list = document.getElementById("log-list-items");
+            const li = document.createElement("li");
+            li.className = "log-item";
+            
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            li.innerHTML = `
+                <span class="log-code">${barcode}</span>
+                <span class="log-time">${timeStr}</span>
+            `;
+            list.insertBefore(li, list.firstChild);
+        }
+
+        function showError(msg) {
+            const errEl = document.getElementById("connect-error");
+            errEl.innerText = msg;
+            errEl.style.display = "block";
+        }
+
+        function hideError() {
+            document.getElementById("connect-error").style.display = "none";
+        }
+    </script>
+</body>
+</html>
