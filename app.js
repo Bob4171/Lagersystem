@@ -1316,16 +1316,28 @@ function openScannerModal() {
     setTimeout(() => {
         html5QrCode = new Html5Qrcode("interactive-camera-feed");
         const config = {
-            fps: 15,
+            fps: 25, // Higher frame rate for faster capture loops
             qrbox: function(width, height) {
                 // Taller rectangular scanning box (85% width and 65% height)
                 return { width: Math.floor(width * 0.85), height: Math.floor(height * 0.65) };
             },
-            aspectRatio: 1.333333
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.QR_CODE
+            ]
         };
         
         html5QrCode.start(
-            { facingMode: "environment" }, 
+            { 
+                facingMode: "environment",
+                width: { min: 640, ideal: 1280, max: 1920 },
+                height: { min: 480, ideal: 720, max: 1080 }
+            }, 
             config,
             (decodedText, decodedResult) => {
                 // Success scanning barcode
@@ -1431,7 +1443,18 @@ function pollMobileScanner(code) {
         .then(data => {
             if (!isMobilePairingActive || currentPairingCode !== code) return;
             
-            if (data.status === "scanned") {
+            if (data.status === "connected_event") {
+                // Update status indicator to success green
+                const dot = document.getElementById("mobile-pairing-status-dot");
+                const text = document.getElementById("mobile-pairing-status-text");
+                dot.style.backgroundColor = "var(--primary)";
+                text.innerText = "Mobil scanner tilsluttet! Klar til scanning.";
+                showToast("Mobil scanner tilsluttet successfully!", "success");
+                playSound("success");
+                
+                // Re-poll immediately
+                pollMobileScanner(code);
+            } else if (data.status === "scanned") {
                 const qtyVal = data.qty || 1;
                 // Update status indicator to success green
                 const dot = document.getElementById("mobile-pairing-status-dot");

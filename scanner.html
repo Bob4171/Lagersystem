@@ -476,17 +476,32 @@
         function startMobileScanner() {
             html5QrCode = new Html5Qrcode("interactive");
             const config = {
-                fps: 15,
+                fps: 25, // Higher frame rate for much faster capture loops
                 qrbox: function(width, height) {
                     // Large square scanning box (80% of minimum dimension) - plenty of room for barcode numbers
                     const size = Math.floor(Math.min(width, height) * 0.8);
                     return { width: size, height: size };
                 },
-                aspectRatio: 1.333333
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.QR_CODE
+                ]
+            };
+
+            // Request HD resolution so the camera image is crisp and sharp (easy to decode)
+            const cameraConstraints = {
+                facingMode: "environment",
+                width: { min: 640, ideal: 1280, max: 1920 },
+                height: { min: 480, ideal: 720, max: 1080 }
             };
 
             html5QrCode.start(
-                { facingMode: "environment" },
+                cameraConstraints,
                 config,
                 onScanSuccess,
                 () => {} // silent on errors
