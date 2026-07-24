@@ -401,6 +401,31 @@
             osc.stop(now + 0.15);
         }
 
+        // Touch interaction to trigger audio context unlocking on mobile (iOS/Android Safari/Chrome)
+        const unlockAudio = () => {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            // Play a silent buffer to warm up the context
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+                osc.start(0);
+                osc.stop(0.01);
+            } catch(e) {}
+
+            document.removeEventListener("click", unlockAudio);
+            document.removeEventListener("touchstart", unlockAudio);
+        };
+        document.addEventListener("click", unlockAudio);
+        document.addEventListener("touchstart", unlockAudio);
+
         // Auto-check URL parameters for prefilled code
         window.addEventListener("DOMContentLoaded", () => {
             const params = new URLSearchParams(window.location.search);
