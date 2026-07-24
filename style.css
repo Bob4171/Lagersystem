@@ -1027,6 +1027,16 @@ a {
     object-fit: cover;
 }
 
+#interactive-camera-feed video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+}
+
+#interactive-camera-feed select, #interactive-camera-feed button {
+    display: none !important;
+}
+
 .scan-camera-overlay {
     position: absolute;
     top: 0;
