@@ -493,15 +493,8 @@
                 ]
             };
 
-            // Request HD resolution so the camera image is crisp and sharp (easy to decode)
-            const cameraConstraints = {
-                facingMode: "environment",
-                width: { min: 640, ideal: 1280, max: 1920 },
-                height: { min: 480, ideal: 720, max: 1080 }
-            };
-
             html5QrCode.start(
-                cameraConstraints,
+                { facingMode: "environment" },
                 config,
                 onScanSuccess,
                 () => {} // silent on errors
