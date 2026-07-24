@@ -163,7 +163,7 @@ btnSetupNext.addEventListener("click", () => {
         
         // Render system Dashboard
         initDashboard();
-        initProductsView();
+        renderInventoryTable();
         initSettingsView();
         showToast("Velkommen til WarehouseFlow!");
         playSound("success");
