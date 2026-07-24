@@ -78,29 +78,98 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
         # Proxy Product Details Request
         if parsed_url.path.startswith('/proxy/product/'):
             barcode = parsed_url.path.split('/')[-1]
-            url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}"
-            req = urllib.request.Request(url, headers={
-                'User-Agent': 'WarehouseFlow - Web - Version 1.0 - contact@warehouseflow.com'
-            })
+            
+            # 1. Try OpenFoodFacts
             try:
-                with urllib.request.urlopen(req) as response:
-                    data = response.read()
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    self.wfile.write(data)
-            except urllib.error.HTTPError as e:
-                self.send_response(e.code)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(e.read())
+                url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'WarehouseFlow/1.0'})
+                with urllib.request.urlopen(req, timeout=2) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    if data.get('status') == 1:
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(data).encode('utf-8'))
+                        return
+            except Exception:
+                pass
+
+            # 2. Try Open Product Facts (General merchandise, toys, etc.)
+            try:
+                url = f"https://world.openproductsfacts.org/api/v2/product/{barcode}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'WarehouseFlow/1.0'})
+                with urllib.request.urlopen(req, timeout=2) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    if data.get('status') == 1:
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(data).encode('utf-8'))
+                        return
+            except Exception:
+                pass
+
+            # 3. Try Open Beauty Facts (Cosmetics, lozenges, medicines like Strepsils)
+            try:
+                url = f"https://world.openbeautyfacts.org/api/v2/product/{barcode}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'WarehouseFlow/1.0'})
+                with urllib.request.urlopen(req, timeout=2) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    if data.get('status') == 1:
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(data).encode('utf-8'))
+                        return
+            except Exception:
+                pass
+
+            # 4. Try DuckDuckGo Search Fallback (Queries all e-commerce / pharmacy indexes)
+            try:
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                url = f"https://html.duckduckgo.com/html/?q={barcode}"
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=3) as response:
+                    html_content = response.read().decode('utf-8')
+                    import re
+                    import html as html_lib
+                    titles = re.findall(r'<a class="result__a"[^>]*>(.*?)</a>', html_content)
+                    if titles:
+                        raw_title = titles[0]
+                        # Remove bold HTML tags
+                        clean_title = re.sub(r'<[^>]+>', '', raw_title)
+                        clean_title = html_lib.unescape(clean_title).strip()
+                        # Clean shop suffixes to keep only product name
+                        clean_title = re.sub(r'\s*[-|]\s*(Coop|Bilka|Føtex|Pricerunner|Nemlig|Webapoteket|Apotek.*|Matas|Harald Nyborg|Jem.*|Elgiganten|IKEA|Proshop|Power|Computersalg|Salling).*$', '', clean_title, flags=re.IGNORECASE)
+                        
+                        mock_product_data = {
+                            "status": 1,
+                            "product": {
+                                "product_name": clean_title,
+                                "brands": "",
+                                "categories": "Diverse",
+                                "quantity": "",
+                                "image_front_url": ""
+                            }
+                        }
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(mock_product_data).encode('utf-8'))
+                        return
             except Exception as e:
-                self.send_response(500)
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(str(e).encode('utf-8'))
+                print(f"DuckDuckGo fallback failed: {e}")
+
+            # 5. Fallback 404
+            self.send_response(404)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": 0, "status_verbose": "product not found"}).encode('utf-8'))
             return
 
         # 2b. Find Image from Multiple Sources (OpenFoodFacts, Yahoo Images, Bing Images)
@@ -254,11 +323,16 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
                 
                 # Check if it's new dict format or old string format
                 if isinstance(scan_data, dict):
-                    response_data = {
-                        "status": "scanned",
-                        "barcode": scan_data["barcode"],
-                        "qty": int(scan_data.get("qty", 1))
-                    }
+                    if scan_data.get("status") == "connected_event":
+                        response_data = {
+                            "status": "connected_event"
+                        }
+                    else:
+                        response_data = {
+                            "status": "scanned",
+                            "barcode": scan_data["barcode"],
+                            "qty": int(scan_data.get("qty", 1))
+                        }
                 else:
                     response_data = {
                         "status": "scanned",
@@ -286,6 +360,8 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
             exists = False
             with sessions_lock:
                 exists = code in sessions
+                if exists:
+                    sessions[code]["queue"].put({"status": "connected_event"})
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')

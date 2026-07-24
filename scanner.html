@@ -494,7 +494,11 @@
             };
 
             html5QrCode.start(
-                { facingMode: "environment" },
+                { 
+                    facingMode: "environment",
+                    width: 640,
+                    height: 480
+                },
                 config,
                 onScanSuccess,
                 () => {} // silent on errors
