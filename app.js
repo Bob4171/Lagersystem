@@ -1373,6 +1373,11 @@ function openMobilePairingModal() {
     const modal = document.getElementById("modal-mobile-pairing");
     openModal(modal);
     
+    if (currentPairingCode) {
+        // Pairing is already active. Just show the modal without resetting the session!
+        return;
+    }
+    
     isMobilePairingActive = true;
     
     // Generate code
@@ -1413,7 +1418,7 @@ function openMobilePairingModal() {
 }
 
 function closeMobilePairingModal() {
-    isMobilePairingActive = false;
+    // Keep isMobilePairingActive = true so the background poll loop continues!
     const modal = document.getElementById("modal-mobile-pairing");
     closeModal(modal);
 }
