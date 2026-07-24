@@ -349,7 +349,7 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
 def run_server():
     socketserver.ThreadingTCPServer.allow_reuse_address = True
     local_ip = get_local_ip()
-    with socketserver.ThreadingTCPServer(("", PORT), LiveReloadHandler) as httpd:
+    with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), LiveReloadHandler) as httpd:
         print(f"Serving WarehouseFlow at:")
         print(f"  -> Localhost:  http://localhost:{PORT}")
         print(f"  -> Network:    http://{local_ip}:{PORT}")
