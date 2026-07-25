@@ -243,6 +243,7 @@ function saveProducts() {
     localStorage.setItem('wf_products', JSON.stringify(products));
     initDashboard();
     renderInventoryTable();
+    syncBarcodesToMobile();
 }
 
 // --- MODAL UTILITIES ---
@@ -1049,7 +1050,7 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-async function triggerBarcodeScannedAction(barcode, qty = 1) {
+async function triggerBarcodeScannedAction(barcode, qty = 1, name = "") {
     playSound("scan");
     logActivity(`Stregkode scannede (${barcode}) x${qty}.`, 'Medarbejder');
     
@@ -1079,9 +1080,16 @@ async function triggerBarcodeScannedAction(barcode, qty = 1) {
         showToast(`+${qty} ${prod.name} (Lager: ${prod.quantity} stk)`);
         playSound("success");
     } else {
-        // New product scanned. Automatically fetch online and save without blocking
-        showToast(`Ny stregkode: ${barcode}. Henter informationer...`, "warning");
-        fetchOnlineProductDetailsAndSave(barcode, qty);
+        // New product scanned. Check if mobile scanner gave a name
+        if (name && name.trim()) {
+            savePlaceholderProduct(barcode, name.trim(), qty);
+            showToast(`Oprettet fra mobil: ${name.trim()} (+${qty})`);
+            playSound("success");
+        } else {
+            // Automatically fetch online and save without blocking
+            showToast(`Ny stregkode: ${barcode}. Henter informationer...`, "warning");
+            fetchOnlineProductDetailsAndSave(barcode, qty);
+        }
     }
 }
 
@@ -1155,10 +1163,13 @@ async function fetchOnlineProductDetailsAndSave(barcode, qty = 1) {
 }
 
 function savePlaceholderProduct(barcode, defaultName, qty = 1) {
+    const isGeneric = defaultName === "Ukendt vare" || defaultName === "Netværksfejl vare";
+    const finalName = isGeneric ? `${defaultName} (${barcode})` : defaultName;
+    
     const newProduct = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
         barcode,
-        name: `${defaultName} (${barcode})`,
+        name: finalName,
         brand: "",
         category: "Diverse",
         priceSale: 0,
@@ -1177,7 +1188,9 @@ function savePlaceholderProduct(barcode, defaultName, qty = 1) {
     renderInventoryTable();
     initDashboard();
     
-    showToast(`Oprettet placeholder: ${newProduct.name} (+${qty})`, "warning");
+    if (isGeneric) {
+        showToast(`Oprettet placeholder: ${newProduct.name} (+${qty})`, "warning");
+    }
     playSound("success");
 }
 
@@ -1431,6 +1444,13 @@ function closeMobilePairingModal() {
     closeModal(modal);
 }
 
+function syncBarcodesToMobile() {
+    if (!isMobilePairingActive || !currentPairingCode) return;
+    const barcodeList = products.map(p => p.barcode).join(",");
+    fetch(`/proxy/session/sync_barcodes?code=${currentPairingCode}&barcodes=${encodeURIComponent(barcodeList)}`)
+        .catch(err => console.error("Failed to sync barcodes to mobile:", err));
+}
+
 function pollMobileScanner(code) {
     if (!isMobilePairingActive || currentPairingCode !== code) return;
     
@@ -1448,22 +1468,26 @@ function pollMobileScanner(code) {
                 showToast("Mobil scanner tilsluttet successfully!", "success");
                 playSound("success");
                 
+                // Sync the existing barcodes to the mobile scanner immediately!
+                syncBarcodesToMobile();
+                
                 // Re-poll immediately
                 pollMobileScanner(code);
             } else if (data.status === "scanned") {
                 const qtyVal = data.qty || 1;
+                const nameVal = data.name || "";
                 // Update status indicator to success green
                 const dot = document.getElementById("mobile-pairing-status-dot");
                 const text = document.getElementById("mobile-pairing-status-text");
                 dot.style.backgroundColor = "var(--primary)";
-                text.innerText = `Varer modtaget! Sidste: ${data.barcode} (x${qtyVal})`;
+                text.innerText = `Varer modtaget! Sidste: ${nameVal || data.barcode} (x${qtyVal})`;
                 
                 // Show toast and trigger scan event
-                showToast(`Mobil scan modtaget: ${data.barcode} (x${qtyVal})`, "success");
+                showToast(`Mobil scan modtaget: ${nameVal || data.barcode} (x${qtyVal})`, "success");
                 playSound("scan");
                 
                 // Trigger action
-                triggerBarcodeScannedAction(data.barcode, qtyVal);
+                triggerBarcodeScannedAction(data.barcode, qtyVal, nameVal);
                 
                 // Re-poll immediately
                 pollMobileScanner(code);

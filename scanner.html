@@ -352,10 +352,17 @@
     <!-- Quantity Modal Overlay -->
     <div id="modal-qty" class="qty-overlay" style="display: none;">
         <div class="qty-card">
-            <h3 style="margin-bottom: 8px; font-family: var(--font-heading); color: var(--text-main);">Indtast antal</h3>
+            <h3 id="qty-modal-title" style="margin-bottom: 8px; font-family: var(--font-heading); color: var(--text-main);">Indtast antal</h3>
             <p id="qty-barcode-display" style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; font-family: monospace; font-weight: 700;"></p>
             
-            <div class="form-group" style="margin-bottom: 20px;">
+            <!-- Product Name Input (Only shown for new/unknown barcodes) -->
+            <div id="group-qty-name" class="form-group" style="margin-bottom: 15px; text-align: left; display: none;">
+                <label for="input-qty-name" style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px; display: block;">Produkt Navn (Ny vare)</label>
+                <input type="text" id="input-qty-name" class="input-control" placeholder="F.eks. Strepsils Citron" style="font-size: 16px; padding: 10px; text-align: left;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+                <label id="lbl-qty-antal" for="input-qty" style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px; display: block;">Antal</label>
                 <input type="number" id="input-qty" class="input-control" value="1" min="1" style="font-size: 20px; padding: 12px; text-align: center; font-weight: 700;">
             </div>
             
@@ -476,12 +483,25 @@
             }
         }
 
+        let knownBarcodes = [];
+
         function showScannerView() {
             document.getElementById("view-connect").style.display = "none";
             document.getElementById("view-scanner").style.display = "block";
             document.getElementById("view-log").style.display = "block";
             document.getElementById("session-code-display").innerText = connectionCode;
             document.getElementById("log-list-items").innerHTML = "";
+
+            // Query barcodes list from PC session
+            fetch(`/proxy/session/get_barcodes?code=${connectionCode}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === "success" && data.barcodes) {
+                        knownBarcodes = data.barcodes;
+                        console.log("Synced known barcodes:", knownBarcodes.length);
+                    }
+                })
+                .catch(err => console.error("Error fetching barcodes:", err));
 
             startMobileScanner();
         }
@@ -557,30 +577,57 @@
             activeBarcode = decodedText;
             document.getElementById("qty-barcode-display").innerText = `Stregkode: ${decodedText}`;
             document.getElementById("input-qty").value = "1";
-            document.getElementById("modal-qty").style.display = "flex";
             
-            // Auto focus and select input
-            setTimeout(() => {
-                const input = document.getElementById("input-qty");
-                input.focus();
-                input.select();
-            }, 100);
+            // Check if barcode is known or new
+            const isKnown = knownBarcodes.includes(decodedText);
+            const nameGroup = document.getElementById("group-qty-name");
+            const modalTitle = document.getElementById("qty-modal-title");
+            const nameInput = document.getElementById("input-qty-name");
+            
+            if (isKnown) {
+                nameGroup.style.display = "none";
+                modalTitle.innerText = "Indtast antal";
+                document.getElementById("modal-qty").style.display = "flex";
+                
+                setTimeout(() => {
+                    const input = document.getElementById("input-qty");
+                    input.focus();
+                    input.select();
+                }, 100);
+            } else {
+                nameGroup.style.display = "block";
+                modalTitle.innerText = "Ny vare opdaget!";
+                nameInput.value = "";
+                document.getElementById("modal-qty").style.display = "flex";
+                
+                setTimeout(() => {
+                    nameInput.focus();
+                }, 100);
+            }
         }
 
         async function submitScannedItem() {
             const qtyInput = document.getElementById("input-qty");
             const qty = parseInt(qtyInput.value) || 1;
+            const nameInput = document.getElementById("input-qty-name");
+            const name = nameInput.value.trim();
             const barcode = activeBarcode;
             
             // Hide modal
             document.getElementById("modal-qty").style.display = "none";
             
             // Add item to local visual logs
-            addLogItem(`${barcode} (x${qty})`);
+            addLogItem(name ? `${name} (x${qty})` : `${barcode} (x${qty})`);
 
-            // Send barcode and quantity to PC via proxy
+            // If we created a new name, add it to our local known list
+            if (name && !knownBarcodes.includes(barcode)) {
+                knownBarcodes.push(barcode);
+            }
+
+            // Send barcode, quantity, and name to PC via proxy
             try {
-                const response = await fetch(`/proxy/session/scan?code=${connectionCode}&barcode=${encodeURIComponent(barcode)}&qty=${qty}`);
+                const url = `/proxy/session/scan?code=${connectionCode}&barcode=${encodeURIComponent(barcode)}&qty=${qty}&name=${encodeURIComponent(name)}`;
+                const response = await fetch(url);
                 const data = await response.json();
                 if (data.status !== "sent") {
                     console.error("Failed to forward scan:", data);
@@ -616,6 +663,13 @@
         // Add event listeners for quantity modal
         document.getElementById("btn-qty-submit").addEventListener("click", submitScannedItem);
         document.getElementById("btn-qty-cancel").addEventListener("click", cancelScannedItem);
+        document.getElementById("input-qty-name").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                document.getElementById("input-qty").focus();
+                document.getElementById("input-qty").select();
+            }
+        });
         document.getElementById("input-qty").addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
                 submitScannedItem();

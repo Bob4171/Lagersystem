@@ -283,7 +283,8 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
                 sessions[code] = {
                     "queue": queue.Queue(),
                     "active": True,
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "barcodes": []
                 }
             
             self.send_response(200)
@@ -291,6 +292,45 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({"status": "registered"}).encode('utf-8'))
+            return
+
+        # 2d-2. Mobile Session: Sync Barcodes (PC client pushes known barcodes)
+        if parsed_url.path == '/proxy/session/sync_barcodes':
+            query = urllib.parse.parse_qs(parsed_url.query)
+            code = query.get('code', [''])[0]
+            barcodes_str = query.get('barcodes', [''])[0]
+            
+            sess = None
+            with sessions_lock:
+                sess = sessions.get(code)
+                if sess:
+                    sess["barcodes"] = [b.strip() for b in barcodes_str.split(",") if b.strip()]
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "synced"}).encode('utf-8'))
+            return
+
+        # 2d-3. Mobile Session: Get Barcodes (Mobile fetches known barcodes)
+        if parsed_url.path == '/proxy/session/get_barcodes':
+            query = urllib.parse.parse_qs(parsed_url.query)
+            code = query.get('code', [''])[0]
+            
+            sess = None
+            with sessions_lock:
+                sess = sessions.get(code)
+            
+            barcodes = []
+            if sess:
+                barcodes = sess.get("barcodes", [])
+                
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "success", "barcodes": barcodes}).encode('utf-8'))
             return
 
         # 2e. Mobile Session: Wait (PC client long-polls for scans)
@@ -331,13 +371,15 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
                         response_data = {
                             "status": "scanned",
                             "barcode": scan_data["barcode"],
-                            "qty": int(scan_data.get("qty", 1))
+                            "qty": int(scan_data.get("qty", 1)),
+                            "name": scan_data.get("name", "")
                         }
                 else:
                     response_data = {
                         "status": "scanned",
                         "barcode": scan_data,
-                        "qty": 1
+                        "qty": 1,
+                        "name": ""
                     }
                 self.wfile.write(json.dumps(response_data).encode('utf-8'))
             except queue.Empty:
@@ -379,6 +421,7 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
             code = query.get('code', [''])[0]
             barcode = query.get('barcode', [''])[0]
             qty = query.get('qty', ['1'])[0]
+            name = query.get('name', [''])[0]
             if not code or not barcode:
                 self.send_response(400)
                 self.end_headers()
@@ -395,8 +438,8 @@ class LiveReloadHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "session_not_found"}).encode('utf-8'))
                 return
             
-            # Put barcode and qty in queue to wake up the waiting PC thread
-            sess["queue"].put({"barcode": barcode, "qty": qty})
+            # Put barcode, qty and name in queue to wake up the waiting PC thread
+            sess["queue"].put({"barcode": barcode, "qty": qty, "name": name})
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
